@@ -32,11 +32,10 @@ if [ ! -d "$APP_PATH" ]; then
   exit 1
 fi
 
-ENGINE_BINARY="$APP_PATH/Contents/MacOS/miniflow-engine"
+ENGINE_BINARY="$APP_PATH/Contents/Resources/miniflow-engine/miniflow-engine"
 if [ ! -f "$ENGINE_BINARY" ]; then
   echo "✗ miniflow-engine binary not found inside .app"
-  echo "  Run ./build_backend.sh first, then:"
-  echo "    cp miniflow-engine/dist/miniflow-engine $APP_PATH/Contents/MacOS/"
+  echo "  Run ./build_all.sh to build everything from scratch."
   exit 1
 fi
 

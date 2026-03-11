@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# build_backend.sh — Bundle the Python backend into a single executable.
+# build_backend.sh — Bundle the Python backend into a directory bundle.
 # Uses the project venv so no system Python dependencies are needed.
 #
-# Output: miniflow-engine/dist/miniflow-engine  (~80 MB standalone binary)
+# Output: miniflow-engine/dist/miniflow-engine/  (directory, ~80 MB)
+# The executable is: dist/miniflow-engine/miniflow-engine
+#
+# Using --onedir (not --onefile) so the engine launches instantly without
+# a slow /tmp extraction step on every run.
 
 set -euo pipefail
 
@@ -33,7 +37,7 @@ echo "→ Bundling miniflow-engine..."
 cd "$ENGINE_DIR"
 
 "$PYINSTALLER" \
-  --onefile \
+  --onedir \
   --name miniflow-engine \
   --hidden-import "uvicorn.logging" \
   --hidden-import "uvicorn.loops.auto" \
@@ -55,4 +59,5 @@ cd "$ENGINE_DIR"
   main.py
 
 echo ""
-echo "✓ Binary ready: $ENGINE_DIR/dist/miniflow-engine"
+echo "✓ Bundle ready: $ENGINE_DIR/dist/miniflow-engine/"
+echo "  Executable:   $ENGINE_DIR/dist/miniflow-engine/miniflow-engine"

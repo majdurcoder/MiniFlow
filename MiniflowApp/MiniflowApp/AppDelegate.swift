@@ -209,15 +209,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.createDirectory(
             at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
+        // onedir layout: Contents/Resources/miniflow-engine/miniflow-engine
+        // legacy fallback: Contents/MacOS/miniflow-engine
+        let resources = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources")
+        let macOS = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS")
         let candidates = [
-            Bundle.main.url(forAuxiliaryExecutable: "miniflow-engine"),
-            Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/miniflow-engine")
-        ].compactMap { $0 }
+            resources.appendingPathComponent("miniflow-engine/miniflow-engine"),
+            macOS.appendingPathComponent("miniflow-engine/miniflow-engine"),
+            macOS.appendingPathComponent("miniflow-engine"),
+        ]
 
         guard let engineURL = candidates.first(where: {
-            FileManager.default.fileExists(atPath: $0.path)
+            FileManager.default.isExecutableFile(atPath: $0.path)
         }) else {
             appendToLog(logURL, "[Swift] ERROR: miniflow-engine binary not found in bundle\n")
+            appendToLog(logURL, "[Swift] Searched: \(candidates.map(\.path).joined(separator: ", "))\n")
             return
         }
 

@@ -27,7 +27,8 @@ CONFIG="${CONFIG:-Release}"
 BUILD_DIR="$SCRIPT_DIR/build"
 BUILT_APP_PATH="$BUILD_DIR/$XCODE_PRODUCT_NAME.app"
 APP_PATH="$BUILD_DIR/$APP_NAME.app"
-ENGINE_BINARY="$SCRIPT_DIR/miniflow-engine/dist/miniflow-engine"
+ENGINE_DIST="$SCRIPT_DIR/miniflow-engine/dist/miniflow-engine"
+ENGINE_BINARY="$ENGINE_DIST/miniflow-engine"
 
 # ── Resolve version ────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ if [ "${SKIP_BACKEND:-0}" = "1" ]; then
   echo "→ Skipping backend build (SKIP_BACKEND=1)"
   if [ ! -f "$ENGINE_BINARY" ]; then
     echo "✗ Engine binary not found at $ENGINE_BINARY"
+    echo "  Expected onedir layout: miniflow-engine/dist/miniflow-engine/miniflow-engine"
     exit 1
   fi
 else
@@ -89,14 +91,19 @@ echo "✓ Swift app built: $APP_PATH"
 echo ""
 echo "━━━ Step 3/4: Copying engine binary into .app ━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-cp "$ENGINE_BINARY" "$APP_PATH/Contents/MacOS/miniflow-engine"
-chmod +x "$APP_PATH/Contents/MacOS/miniflow-engine"
-echo "✓ Engine binary copied to $APP_PATH/Contents/MacOS/miniflow-engine"
+# Copy the entire onedir bundle into Contents/Resources/miniflow-engine/
+# (Resources, not MacOS — codesign does not try to sign Resources content,
+# avoiding failures on .dist-info dirs inside the PyInstaller bundle)
+mkdir -p "$APP_PATH/Contents/Resources"
+rm -rf "$APP_PATH/Contents/Resources/miniflow-engine"
+cp -R "$ENGINE_DIST" "$APP_PATH/Contents/Resources/miniflow-engine"
+chmod +x "$APP_PATH/Contents/Resources/miniflow-engine/miniflow-engine"
+echo "✓ Engine bundle copied to $APP_PATH/Contents/Resources/miniflow-engine/"
 
-# Re-sign the whole bundle now that engine binary is inside
-# (adding a file after Xcode's signing invalidates the seal → "damaged" on other Macs)
-echo "→ Re-signing app bundle..."
-codesign --force --deep --sign - "$APP_PATH"
+# Re-sign only the main Swift executable (not --deep, which would recurse
+# into Resources and fail on non-bundle .dist-info dirs)
+echo "→ Re-signing main executable..."
+codesign --force --sign - "$APP_PATH/Contents/MacOS/MiniflowApp"
 echo "✓ App re-signed (ad-hoc)"
 
 # ── Step 4: Create DMG ────────────────────────────────────────────────────────
