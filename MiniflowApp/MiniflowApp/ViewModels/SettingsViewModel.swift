@@ -56,14 +56,22 @@ final class SettingsViewModel: ObservableObject {
 
     // MARK: - Save API Keys / Profile
 
-    func saveOpenAIKey() async {
-        try? await api.invokeVoid("save_api_key", body: ["service": "openai", "key": openAIKey])
-        flashStatus("Saved")
+    func saveOpenAIKey() async -> Bool {
+        do {
+            try await api.invokeVoid("save_api_key", body: ["service": "openai", "key": openAIKey])
+            return true
+        } catch {
+            return false
+        }
     }
 
-    func saveSmallestKey() async {
-        try? await api.invokeVoid("save_api_key", body: ["service": "smallest", "key": smallestKey])
-        flashStatus("Saved")
+    func saveSmallestKey() async -> Bool {
+        do {
+            try await api.invokeVoid("save_api_key", body: ["service": "smallest", "key": smallestKey])
+            return true
+        } catch {
+            return false
+        }
     }
 
     func saveUserName() async {

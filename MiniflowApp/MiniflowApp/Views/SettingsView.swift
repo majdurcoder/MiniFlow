@@ -42,6 +42,10 @@ struct SettingsView: View {
 
 private struct APIKeysTab: View {
     @ObservedObject var vm: SettingsViewModel
+    @State private var openAISaveState: SaveState = .idle
+    @State private var smallestSaveState: SaveState = .idle
+
+    enum SaveState { case idle, saving, saved, error }
 
     var body: some View {
         Form {
@@ -49,36 +53,59 @@ private struct APIKeysTab: View {
                 HStack {
                     SecureField("OpenAI API Key", text: $vm.openAIKey)
                         .textFieldStyle(.roundedBorder)
-                    Button("Save") {
-                        Task { await vm.saveOpenAIKey() }
+                        .onChange(of: vm.openAIKey) { _ in openAISaveState = .idle }
+                    saveButton(state: openAISaveState, disabled: vm.openAIKey.isEmpty) {
+                        openAISaveState = .saving
+                        let ok = await vm.saveOpenAIKey()
+                        openAISaveState = ok ? .saved : .error
                     }
-                    .disabled(vm.openAIKey.isEmpty)
                 }
-                Text("Used for the GPT-4o agent loop.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                saveHint(state: openAISaveState, hint: "Used for the GPT-4o agent loop.")
             } header: { Text("OpenAI") }
 
             Section {
                 HStack {
                     SecureField("Smallest AI API Key", text: $vm.smallestKey)
                         .textFieldStyle(.roundedBorder)
-                    Button("Save") {
-                        Task { await vm.saveSmallestKey() }
+                        .onChange(of: vm.smallestKey) { _ in smallestSaveState = .idle }
+                    saveButton(state: smallestSaveState, disabled: vm.smallestKey.isEmpty) {
+                        smallestSaveState = .saving
+                        let ok = await vm.saveSmallestKey()
+                        smallestSaveState = ok ? .saved : .error
                     }
-                    .disabled(vm.smallestKey.isEmpty)
                 }
-                Text("Used for real-time speech-to-text.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                saveHint(state: smallestSaveState, hint: "Used for real-time speech-to-text.")
             } header: { Text("Smallest AI") }
-
-            if let status = vm.saveStatus {
-                Text(status).foregroundStyle(.green).font(.caption)
-            }
         }
         .formStyle(.grouped)
         .padding()
+    }
+
+    @ViewBuilder
+    private func saveButton(state: SaveState, disabled: Bool, action: @escaping () async -> Void) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            switch state {
+            case .saving: ProgressView().controlSize(.small)
+            case .saved:  Label("Saved", systemImage: "checkmark").foregroundStyle(.green)
+            case .error:  Label("Error", systemImage: "xmark.circle").foregroundStyle(.red)
+            case .idle:   Text("Save")
+            }
+        }
+        .disabled(disabled || state == .saving)
+        .frame(minWidth: 64)
+    }
+
+    @ViewBuilder
+    private func saveHint(state: SaveState, hint: String) -> some View {
+        switch state {
+        case .error:
+            Text("Could not save — is the MiniFlow engine running?")
+                .font(.caption).foregroundStyle(.red)
+        default:
+            Text(hint).font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 
