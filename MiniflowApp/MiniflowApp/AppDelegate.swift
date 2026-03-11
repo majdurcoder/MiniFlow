@@ -1,0 +1,221 @@
+import AppKit
+import SwiftUI
+import Combine
+import ServiceManagement
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+
+    // MARK: - Properties
+
+    private var statusItem: NSStatusItem!
+    private var mainWindow: NSWindow?
+    private var pillPanel: FloatingPanel?
+    private var settingsWindow: NSWindow?
+
+    private var agentVM: AgentViewModel!
+    private var statusCancellable: AnyCancellable?
+    private var pillCancellable: AnyCancellable?
+    private var pillHideTask: Task<Void, Never>?
+
+    // Subprocess handle for the bundled Python engine
+    private var engineProcess: Process?
+
+    // MARK: - Lifecycle
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        launchEngineIfBundled()
+        agentVM = AgentViewModel()
+        setupStatusItem()
+        setupMainWindow()
+        setupDictationPill()
+        setupHotkey()
+        setupMenuBarStatusObserver()
+        setupPillVisibilityObserver()
+        EventStream.shared.connect()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        HotkeyManager.shared.unregister()
+        EventStream.shared.disconnect()
+        engineProcess?.terminate()
+    }
+
+    // MARK: - Status Bar
+
+    private func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        guard let button = statusItem.button else { return }
+        button.image = NSImage(systemSymbolName: "waveform.circle.fill",
+                               accessibilityDescription: "MiniFlow")
+        button.image?.isTemplate = true
+        statusItem.menu = buildMenu()
+    }
+
+    private func buildMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        let showItem = NSMenuItem(title: "Show MiniFlow",
+                                  action: #selector(toggleMainWindow),
+                                  keyEquivalent: "")
+        showItem.target = self
+        menu.addItem(showItem)
+
+        menu.addItem(.separator())
+
+        let settingsItem = NSMenuItem(title: "Settings…",
+                                      action: #selector(openSettings),
+                                      keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        menu.addItem(.separator())
+
+        menu.addItem(withTitle: "Quit MiniFlow",
+                     action: #selector(NSApplication.terminate(_:)),
+                     keyEquivalent: "q")
+        return menu
+    }
+
+    private func setupMenuBarStatusObserver() {
+        statusCancellable = EventStream.shared.$agentStatus
+            .receive(on: RunLoop.main)
+            .sink { [weak self] status in
+                let name = status == "processing"
+                    ? "waveform.circle"
+                    : "waveform.circle.fill"
+                self?.statusItem.button?.image = NSImage(
+                    systemSymbolName: name,
+                    accessibilityDescription: "MiniFlow"
+                )
+                self?.statusItem.button?.image?.isTemplate = true
+            }
+    }
+
+    // MARK: - Main Window
+
+    private func setupMainWindow() {
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        win.title = "MiniFlow"
+        win.contentView = NSHostingView(
+            rootView: MainWindowView(vm: agentVM, onSettings: { [weak self] in
+                self?.openSettings()
+            })
+        )
+        win.center()
+        win.isReleasedWhenClosed = false
+        mainWindow = win
+    }
+
+    @objc func toggleMainWindow() {
+        guard let win = mainWindow else { return }
+        if win.isVisible {
+            win.orderOut(nil)
+        } else {
+            win.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    // MARK: - Dictation Pill
+
+    private func setupDictationPill() {
+        guard let screen = NSScreen.main else { return }
+        let pillW: CGFloat = 280
+        let pillH: CGFloat = 56
+        let x = screen.frame.midX - pillW / 2
+        let y = screen.frame.minY + 40
+
+        let panel = FloatingPanel(
+            contentRect: NSRect(x: x, y: y, width: pillW, height: pillH),
+            styleMask: .nonactivatingPanel,
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentView = NSHostingView(rootView: DictationPill(vm: agentVM))
+        panel.level = .floating
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        pillPanel = panel
+    }
+
+    private func setupPillVisibilityObserver() {
+        pillCancellable = agentVM.$isListening
+            .combineLatest(agentVM.$isProcessing)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isListening, isProcessing in
+                guard let self else { return }
+                if isListening || isProcessing {
+                    self.pillHideTask?.cancel()
+                    self.pillPanel?.orderFront(nil)
+                } else {
+                    // Show result briefly then hide
+                    self.pillHideTask?.cancel()
+                    self.pillHideTask = Task {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        guard !Task.isCancelled else { return }
+                        self.pillPanel?.orderOut(nil)
+                    }
+                }
+            }
+    }
+
+    // MARK: - Settings Window
+
+    @objc func openSettings() {
+        if let win = settingsWindow, win.isVisible {
+            win.makeKeyAndOrderFront(nil)
+            return
+        }
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 440),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        win.title = "MiniFlow Settings"
+        win.contentView = NSHostingView(rootView: SettingsView())
+        win.center()
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow = win
+    }
+
+    // MARK: - Fn Hotkey (hold-to-talk)
+
+    private func setupHotkey() {
+        HotkeyManager.shared.onPress = { [weak self] in
+            // Capture the frontmost app BEFORE MiniFlow steals focus
+            let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            Task { await self?.agentVM.startListening(targetApp: bundleID) }
+        }
+        HotkeyManager.shared.onRelease = { [weak self] in
+            Task { await self?.agentVM.stopListening() }
+        }
+        HotkeyManager.shared.register()
+    }
+
+    // MARK: - Bundled Engine
+
+    private func launchEngineIfBundled() {
+        let candidates = [
+            Bundle.main.url(forAuxiliaryExecutable: "miniflow-engine"),
+            Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/miniflow-engine")
+        ].compactMap { $0 }
+
+        guard let engineURL = candidates.first(where: {
+            FileManager.default.isExecutableFile(atPath: $0.path)
+        }) else { return }
+
+        let process = Process()
+        process.executableURL = engineURL
+        try? process.run()
+        engineProcess = process
+    }
+}

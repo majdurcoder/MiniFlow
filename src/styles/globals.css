@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Geist Pixel";
+  src: url("/fonts/GeistPixel-Square.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: transparent;
+    color: #1C1C1E;
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #D1D1CE;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #B0B0AD;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-mini-surface border border-mini-border/50 rounded-lg;
+  }
+
+  .glass-light {
+    @apply bg-mini-surface-light/60 border border-mini-border/30 rounded-lg;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 font-medium rounded-sm transition-all duration-200 active:scale-95;
+    background: linear-gradient(135deg, #1E3A5F, #2E5FA3);
+    border: 1px solid #2E5FA3;
+    color: #FFFFFF;
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.1);
+  }
+
+  .btn-ghost {
+    @apply px-3 py-2 text-mini-text-muted hover:text-mini-text hover:bg-mini-surface-light
+           rounded-lg transition-all duration-200;
+  }
+
+  .input-field {
+    @apply w-full py-3 bg-transparent border-b text-mini-text
+           placeholder-mini-text-muted
+           focus:outline-none transition-all duration-300;
+    border-color: rgba(30, 58, 95, 0.2);
+    font-family: "Geist Pixel", monospace;
+    font-size: 1rem;
+  }
+
+  .input-field:focus {
+    border-color: #2E5FA3;
+  }
+
+  /* Section title with decorative line */
+  .section-title {
+    font-family: "Geist Pixel", monospace;
+    color: #2E5FA3;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: rgba(30, 58, 95, 0.2);
+  }
+
+  /* Microphone pulse animation */
+  .mic-pulse {
+    @apply relative;
+  }
+  .mic-pulse::before {
+    content: "";
+    @apply absolute inset-0 rounded-full animate-pulse-ring;
+    background: rgba(30, 58, 95, 0.3);
+  }
+  .mic-pulse::after {
+    content: "";
+    @apply absolute -inset-2 rounded-full animate-pulse-ring;
+    background: rgba(30, 58, 95, 0.15);
+    animation-delay: 0.5s;
+  }
+
+  /* Transcript text styling */
+  .transcript-interim {
+    @apply text-mini-text-muted italic;
+  }
+  .transcript-final {
+    @apply text-mini-text;
+  }
+}
+
+@layer utilities {
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
