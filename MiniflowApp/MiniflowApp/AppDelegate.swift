@@ -204,18 +204,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Bundled Engine
 
     private func launchEngineIfBundled() {
+        let logURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("miniflow/miniflow.log")
+        try? FileManager.default.createDirectory(
+            at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
         let candidates = [
             Bundle.main.url(forAuxiliaryExecutable: "miniflow-engine"),
             Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/miniflow-engine")
         ].compactMap { $0 }
 
         guard let engineURL = candidates.first(where: {
-            FileManager.default.isExecutableFile(atPath: $0.path)
-        }) else { return }
+            FileManager.default.fileExists(atPath: $0.path)
+        }) else {
+            appendToLog(logURL, "[Swift] ERROR: miniflow-engine binary not found in bundle\n")
+            return
+        }
+
+        appendToLog(logURL, "[Swift] Found engine at: \(engineURL.path)\n")
+
+        // Ensure executable bit is set
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: engineURL.path)
 
         let process = Process()
         process.executableURL = engineURL
-        try? process.run()
-        engineProcess = process
+
+        // Pipe stdout+stderr into the log file
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = { [logURL] handle in
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else { return }
+            appendToLog(logURL, chunk)
+        }
+
+        process.terminationHandler = { [logURL] p in
+            appendToLog(logURL, "[Swift] Engine exited with code \(p.terminationStatus)\n")
+        }
+
+        do {
+            try process.run()
+            appendToLog(logURL, "[Swift] Engine launched (pid=\(process.processIdentifier))\n")
+            engineProcess = process
+        } catch {
+            appendToLog(logURL, "[Swift] ERROR: Failed to launch engine: \(error)\n")
+        }
+    }
+}
+
+// MARK: - Log helpers (nonisolated, safe to call from any thread)
+
+private func appendToLog(_ url: URL, _ message: String) {
+    appendToLog(url, Data(message.utf8))
+}
+
+private func appendToLog(_ url: URL, _ data: Data) {
+    if let handle = try? FileHandle(forWritingTo: url) {
+        handle.seekToEndOfFile()
+        handle.write(data)
+        handle.closeFile()
+    } else {
+        try? data.write(to: url)
     }
 }
