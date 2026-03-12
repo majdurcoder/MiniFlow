@@ -75,6 +75,7 @@ hdiutil create \
   -srcfolder "$DMG_DIR" \
   -ov \
   -format UDZO \
+  -fs HFS+ \
   -imagekey zlib-level=9 \
   "$OUTPUT_DMG"
 

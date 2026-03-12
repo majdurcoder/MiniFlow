@@ -9,11 +9,22 @@ WebSocket: ws://localhost:8765/ws
 
 from __future__ import annotations
 
+import sys
+import os
+
+# When bundled with PyInstaller, point SSL/requests at the bundled certifi certs
+# so HTTPS calls work without any manual launchctl env setup.
+if getattr(sys, "frozen", False):
+    _bundle = sys._MEIPASS  # type: ignore[attr-defined]
+    _cacert = os.path.join(_bundle, "certifi", "cacert.pem")
+    if os.path.exists(_cacert):
+        os.environ.setdefault("SSL_CERT_FILE", _cacert)
+        os.environ.setdefault("REQUESTS_CA_BUNDLE", _cacert)
+
 import asyncio
 import base64
 import json
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -242,4 +253,4 @@ async def invoke(command: str, body: dict = {}):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8765, reload=True)
+    uvicorn.run(app, host="127.0.0.1", port=8765, reload=False)
