@@ -181,6 +181,7 @@ final class AgentViewModel: ObservableObject {
     }
 
     // MARK: - Accessibility
+    // test
 
     func checkAccessibility() async {
         let trusted = AXIsProcessTrusted()
