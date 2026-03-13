@@ -321,17 +321,8 @@ async def execute_command(text: str) -> list[dict]:
     try:
         openai_key = config.get_openai_key()
     except ValueError:
-        # No OpenAI key — just type the transcript directly into the focused app
-        if not dictation_module.check_accessibility():
-            err = "Accessibility permission required. Go to System Settings → Privacy → Accessibility and enable MiniFlow."
-            log.warning(err)
-            await _emit("action-result", {"action": "dictation", "success": False, "message": err})
-            await _emit("agent-status", "idle")
-            return [{"action": "dictation", "success": False, "message": err}]
-        log.info(f"No OpenAI key set, typing text directly: '{text[:60]}'")
-        await _activate_target_app()
-        await asyncio.to_thread(dictation_module.type_text, text)
-        log.info("type_text complete")
+        # No OpenAI key — delegate dictation typing to Swift app process.
+        log.info(f"No OpenAI key set, emitting dictation action: '{text[:60]}'")
         result = [{"action": "dictation", "success": True, "message": text}]
         await _emit("action-result", {"action": "dictation", "success": True, "message": text})
         history.append_entry(transcript=text, entry_type="dictation", actions=result, success=True)
@@ -371,18 +362,9 @@ async def execute_command(text: str) -> list[dict]:
         msg = response.choices[0].message
 
         if not msg.tool_calls:
-            # No tool call → always type the original transcript as-is.
-            # We NEVER type GPT's text response — that was causing assistant-speak
-            # ("I'm just a virtual assistant...") to land in the target app.
-            if not dictation_module.check_accessibility():
-                err = "Accessibility permission required. Go to System Settings → Privacy → Accessibility and enable MiniFlow."
-                log.warning(err)
-                await _emit("action-result", {"action": "dictation", "success": False, "message": err})
-                action_results.append({"action": "dictation", "success": False, "message": err})
-                break
-            await _activate_target_app()
-            await asyncio.to_thread(dictation_module.type_text, text)
-            log.info(f"Typed dictation: '{text[:60]}'")
+            # No tool call -> emit dictation action; Swift process performs typing.
+            # We NEVER type GPT's text response, only original transcript.
+            log.info(f"Emitting dictation action: '{text[:60]}'")
             await _emit("action-result", {"action": "dictation", "success": True, "message": text})
             action_results.append({"action": "dictation", "success": True, "message": text})
             break

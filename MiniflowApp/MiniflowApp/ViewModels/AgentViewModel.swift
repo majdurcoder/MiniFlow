@@ -1,6 +1,8 @@
 import Foundation
 import Combine
 import AVFoundation
+import AppKit
+import ApplicationServices
 
 @MainActor
 final class AgentViewModel: ObservableObject {
@@ -24,6 +26,7 @@ final class AgentViewModel: ObservableObject {
     private let audio = AudioCaptureService.shared
     private var cancellables = Set<AnyCancellable>()
     private var historyTimer: Timer?
+    private var targetBundleID: String?
 
     // Accumulate final transcript segments during a Fn-hold session.
     // executeCommand is called ONCE with the full text when stopListening() fires.
@@ -105,6 +108,7 @@ final class AgentViewModel: ObservableObject {
     func startListening(targetApp: String? = nil) async {
         guard !isListening else { return }
         isListening = true
+        targetBundleID = targetApp
         transcript = ""
         transcriptBuffer = []
         errorMessage = nil
@@ -169,6 +173,7 @@ final class AgentViewModel: ObservableObject {
             let results: [ActionResult] = try await api.invoke("execute_command", body: ["command": text])
             actions = results + actions
             lastResultAction = results.first
+            await handleLocalDictationIfNeeded(results)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -184,12 +189,57 @@ final class AgentViewModel: ObservableObject {
     // MARK: - Accessibility
 
     func checkAccessibility() async {
-        if let granted: Bool = try? await api.invoke("check_accessibility") {
-            needsAccessibility = !granted
-        }
+        needsAccessibility = !AXIsProcessTrusted()
     }
 
     func openAccessibilitySettings() {
-        Task { try? await api.invokeVoid("open_accessibility_settings") }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    // MARK: - Local typing
+
+    private func handleLocalDictationIfNeeded(_ results: [ActionResult]) async {
+        guard let dictation = results.first(where: { $0.action == "dictation" && $0.success }) else {
+            return
+        }
+
+        guard AXIsProcessTrusted() else {
+            needsAccessibility = true
+            errorMessage = "Accessibility permission required. Go to System Settings → Privacy → Accessibility and enable MiniFlow."
+            return
+        }
+
+        needsAccessibility = false
+
+        if let bundleID = targetBundleID {
+            activateTargetApp(bundleID)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+
+        typeTextLocally(dictation.message)
+    }
+
+    private func activateTargetApp(_ bundleID: String) {
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        apps.first?.activate(options: [.activateIgnoringOtherApps])
+    }
+
+    private func typeTextLocally(_ text: String) {
+        guard !text.isEmpty else { return }
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+
+        let utf16 = Array(text.utf16)
+        if let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+           let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
+            utf16.withUnsafeBufferPointer { buf in
+                guard let base = buf.baseAddress else { return }
+                down.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: base)
+                up.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: base)
+            }
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
     }
 }
