@@ -1,0 +1,45 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep -m1 'MARKETING_VERSION' MiniflowApp/MiniflowApp.xcodeproj/project.pbxproj \
+            | sed 's/.*= *//;s/;//;s/ *//')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Swift app
+        run: |
+          xcodebuild \
+            -project MiniflowApp/MiniflowApp.xcodeproj \
+            -scheme MiniflowApp \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            CONFIGURATION_BUILD_DIR="$GITHUB_WORKSPACE/build" \
+            clean build
+
+      - name: Zip app bundle
+        run: |
+          cd "$GITHUB_WORKSPACE/build"
+          zip -r "MiniFlow-${{ steps.version.outputs.version }}.zip" MiniflowApp.app
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: MiniFlow v${{ steps.version.outputs.version }}
+          files: build/MiniFlow-${{ steps.version.outputs.version }}.zip
