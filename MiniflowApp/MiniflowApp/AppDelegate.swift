@@ -236,6 +236,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let process = Process()
         process.executableURL = engineURL
 
+        // Ensure TLS cert env vars are set for GUI-launched flows.
+        // This mirrors:
+        // launchctl setenv SSL_CERT_FILE ".../cacert.pem"
+        // launchctl setenv REQUESTS_CA_BUNDLE ".../cacert.pem"
+        let certCandidates = [
+            resources.appendingPathComponent("miniflow-engine/_internal/certifi/cacert.pem"),
+            resources.appendingPathComponent("miniflow-engine/certifi/cacert.pem"),
+        ]
+        if let certURL = certCandidates.first(where: {
+            FileManager.default.fileExists(atPath: $0.path)
+        }) {
+            setLaunchctlEnv(name: "SSL_CERT_FILE", value: certURL.path, logURL: logURL)
+            setLaunchctlEnv(name: "REQUESTS_CA_BUNDLE", value: certURL.path, logURL: logURL)
+
+            var env = ProcessInfo.processInfo.environment
+            env["SSL_CERT_FILE"] = certURL.path
+            env["REQUESTS_CA_BUNDLE"] = certURL.path
+            process.environment = env
+
+            appendToLog(logURL, "[Swift] SSL cert env configured: \(certURL.path)\n")
+        } else {
+            appendToLog(logURL, "[Swift] WARN: certifi cacert.pem not found in bundle\n")
+        }
+
         // Pipe stdout+stderr into the log file
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -273,5 +297,22 @@ private func appendToLog(_ url: URL, _ data: Data) {
         handle.closeFile()
     } else {
         try? data.write(to: url)
+    }
+}
+
+private func setLaunchctlEnv(name: String, value: String, logURL: URL) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    process.arguments = ["setenv", name, value]
+    do {
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus == 0 {
+            appendToLog(logURL, "[Swift] launchctl setenv \(name) set\n")
+        } else {
+            appendToLog(logURL, "[Swift] WARN: launchctl setenv \(name) failed with status \(process.terminationStatus)\n")
+        }
+    } catch {
+        appendToLog(logURL, "[Swift] WARN: launchctl setenv \(name) error: \(error)\n")
     }
 }

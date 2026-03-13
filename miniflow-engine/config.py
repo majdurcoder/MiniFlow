@@ -3,6 +3,8 @@ Config — reads/writes ~/miniflow/*.json
 Same file paths as the old Rust backend — existing user data is preserved.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import stat
