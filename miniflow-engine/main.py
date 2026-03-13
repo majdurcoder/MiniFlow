@@ -241,5 +241,19 @@ async def invoke(command: str, body: dict = {}):
 
 
 if __name__ == "__main__":
+    import sys
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8765, reload=True)
+
+    # When frozen (PyInstaller bundle), GUI apps don't inherit shell env vars —
+    # SSL_CERT_FILE / REQUESTS_CA_BUNDLE are unset and all HTTPS calls fail.
+    # Auto-configure from the certifi bundle that PyInstaller packages.
+    if getattr(sys, "frozen", False):
+        try:
+            import certifi
+            cert = certifi.where()
+            os.environ.setdefault("SSL_CERT_FILE", cert)
+            os.environ.setdefault("REQUESTS_CA_BUNDLE", cert)
+        except Exception:
+            pass
+
+    uvicorn.run(app, host="127.0.0.1", port=8765, reload=False)
