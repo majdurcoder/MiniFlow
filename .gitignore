@@ -33,9 +33,6 @@ miniflow_keys.json
 miniflow-engine/.venv/
 miniflow-engine/venv/
 
-# Legacy Tauri/Rust (removed)
-src-tauri/
-
 # Claude internal docs
 .claude/
 

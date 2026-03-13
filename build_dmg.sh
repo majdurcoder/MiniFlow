@@ -2,11 +2,10 @@
 # build_dmg.sh — Package MiniFlow.app into a distributable DMG.
 #
 # Prerequisites:
-#   1. Build the Python backend:  ./build_backend.sh
-#   2. Build the Swift .app in Xcode (Product → Archive, or Product → Build)
-#   3. Copy the engine binary into the .app:
-#        cp miniflow-engine/dist/miniflow-engine \
-#           build/MiniFlow.app/Contents/MacOS/miniflow-engine
+#   1. Build the Python backend: ./build_backend.sh
+#   2. Build the Swift .app in Xcode (Product -> Archive, or Product -> Build)
+#   3. Ensure engine bundle exists inside the app:
+#        build/MiniFlow.app/Contents/Resources/miniflow-engine/miniflow-engine
 #
 # Usage:
 #   chmod +x build_dmg.sh

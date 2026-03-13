@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The fn card's inner content — matches the Tauri reference design.
+/// The fn card's inner content.
 /// Idle: descriptive text on left + mic button on right.
 /// Active: transcript text replaces the description.
 struct DictationWidget: View {
