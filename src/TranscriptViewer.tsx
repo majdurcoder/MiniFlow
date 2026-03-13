@@ -1,35 +1,11 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { getHistory } from "./lib/bridge";
 
 interface HistoryEntry {
   id: string;
   timestamp: string;
   transcript: string;
   entry_type: string;
-}
-
-function waitForTauri(): Promise<void> {
-  return new Promise((resolve) => {
-    if ((window as any).__TAURI_INTERNALS__) {
-      resolve();
-      return;
-    }
-    const interval = setInterval(() => {
-      if ((window as any).__TAURI_INTERNALS__) {
-        clearInterval(interval);
-        resolve();
-      }
-    }, 50);
-    setTimeout(() => {
-      clearInterval(interval);
-      resolve();
-    }, 5000);
-  });
-}
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  await waitForTauri();
-  return tauriInvoke<T>(cmd, args);
 }
 
 export function TranscriptViewer() {
@@ -40,7 +16,7 @@ export function TranscriptViewer() {
 
   const loadTranscripts = useCallback(async () => {
     try {
-      const data = await invoke<HistoryEntry[]>("get_history");
+      const data = await getHistory();
       setEntries(data.reverse());
     } catch (e) {
       console.error("Failed to load transcripts:", e);

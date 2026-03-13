@@ -32,3 +32,12 @@ miniflow_keys.json
 # Python venvs
 miniflow-engine/.venv/
 miniflow-engine/venv/
+
+# Legacy Tauri/Rust (removed)
+src-tauri/
+
+# Claude internal docs
+.claude/
+
+# Vercel deployment config
+.vercel/

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { getHistory, clearHistory } from "./lib/bridge";
 
 interface HistoryAction {
   action: string;
@@ -29,38 +29,14 @@ const ACTION_LABELS: Record<string, string> = {
   response: "Response",
 };
 
-function waitForTauri(): Promise<void> {
-  return new Promise((resolve) => {
-    if ((window as any).__TAURI_INTERNALS__) {
-      resolve();
-      return;
-    }
-    const interval = setInterval(() => {
-      if ((window as any).__TAURI_INTERNALS__) {
-        clearInterval(interval);
-        resolve();
-      }
-    }, 50);
-    setTimeout(() => {
-      clearInterval(interval);
-      resolve();
-    }, 5000);
-  });
-}
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  await waitForTauri();
-  return tauriInvoke<T>(cmd, args);
-}
-
 export function HistoryWindow() {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadHistory = useCallback(async () => {
     try {
-      const data = await invoke<HistoryEntry[]>("get_history");
-      setEntries(data.reverse());
+      const data = await getHistory();
+      setEntries((data as HistoryEntry[]).reverse());
     } catch (e) {
       console.error("Failed to load history:", e);
     } finally {
@@ -74,7 +50,7 @@ export function HistoryWindow() {
 
   const handleClear = async () => {
     try {
-      await invoke("clear_history");
+      await clearHistory();
       setEntries([]);
     } catch (e) {
       console.error("Failed to clear history:", e);

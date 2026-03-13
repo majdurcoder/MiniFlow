@@ -62,20 +62,19 @@ async def stop_dictation():
 
 
 def type_text(text: str):
-    """Type text into the currently focused application via CGEvent."""
-    import time
+    """Inject text into the focused app via a single CGEvent unicode string."""
     try:
         import Quartz
+        if not text:
+            return
         src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
-        log.info(f"type_text: typing {len(text)} chars (trusted={AXIsProcessTrusted()})")
-        for char in text:
-            down = Quartz.CGEventCreateKeyboardEvent(src, 0, True)
-            up = Quartz.CGEventCreateKeyboardEvent(src, 0, False)
-            Quartz.CGEventKeyboardSetUnicodeString(down, 1, char)
-            Quartz.CGEventKeyboardSetUnicodeString(up, 1, char)
-            Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
-            Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
-            time.sleep(0.004)  # 4ms gap — needed for Electron/web apps to process each keystroke
+        log.info(f"type_text: injecting {len(text)} chars (trusted={AXIsProcessTrusted()})")
+        down = Quartz.CGEventCreateKeyboardEvent(src, 0, True)
+        up   = Quartz.CGEventCreateKeyboardEvent(src, 0, False)
+        Quartz.CGEventKeyboardSetUnicodeString(down, len(text), text)
+        Quartz.CGEventKeyboardSetUnicodeString(up,   len(text), text)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
         log.info("type_text: done")
     except Exception as e:
         log.error(f"type_text failed: {e}")

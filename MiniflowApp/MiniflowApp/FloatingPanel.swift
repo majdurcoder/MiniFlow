@@ -27,7 +27,8 @@ final class FloatingPanel: NSPanel {
         titleVisibility = .hidden
     }
 
-    // Allow key events (e.g. typing in the command bar) without becoming main
-    override var canBecomeKey: Bool { true }
+    // Do NOT steal key window status — overlay apps (Alfred, Raycast, Spotlight)
+    // are also NSPanels and will lose focus if this panel claims key status.
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }

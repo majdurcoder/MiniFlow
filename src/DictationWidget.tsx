@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { onAgentStatus, onActionResult, onTranscriptionError, onDictationStatus, type ActionResult, type DictationStatusEvent } from "./lib/bridge";
 
 type WidgetState = "listening" | "processing" | "result" | "error";
 
@@ -63,15 +63,20 @@ export function DictationWidget() {
 
   useEffect(() => {
     const unlisteners: (() => void)[] = [];
-    const setup = async () => {
-      unlisteners.push(await listen<string>("widget-processing", () => setState("processing")));
-      unlisteners.push(await listen<AgentResult>("widget-result", (e) => { setResult(e.payload); setState("result"); }));
-      unlisteners.push(await listen<string>("widget-error", (e) => { setErrorMsg(e.payload); setState("error"); }));
-      unlisteners.push(await listen<{ active: boolean }>("dictation-status", (e) => {
-        if (e.payload.active) { setState("listening"); setResult(null); setErrorMsg(""); }
-      }));
-    };
-    setup();
+    unlisteners.push(onAgentStatus((status: string) => {
+      if (status === "processing") setState("processing");
+    }));
+    unlisteners.push(onActionResult((res: ActionResult) => {
+      setResult({ action_type: res.action, actions: [res], transcript: "" });
+      setState("result");
+    }));
+    unlisteners.push(onTranscriptionError((err: string) => {
+      setErrorMsg(err);
+      setState("error");
+    }));
+    unlisteners.push(onDictationStatus((e: DictationStatusEvent) => {
+      if (e.active) { setState("listening"); setResult(null); setErrorMsg(""); }
+    }));
     return () => unlisteners.forEach((u) => u());
   }, []);
 
