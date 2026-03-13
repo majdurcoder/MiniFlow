@@ -233,6 +233,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.setAttributes(
             [.posixPermissions: 0o755], ofItemAtPath: engineURL.path)
 
+        // Avoid duplicate engine launches when another MiniFlow instance is
+        // already listening on localhost:8765.
+        if isPortListening(8765) {
+            appendToLog(logURL, "[Swift] Engine already listening on :8765, skipping launch\n")
+            return
+        }
+
         let process = Process()
         process.executableURL = engineURL
 
@@ -314,5 +321,25 @@ private func setLaunchctlEnv(name: String, value: String, logURL: URL) {
         }
     } catch {
         appendToLog(logURL, "[Swift] WARN: launchctl setenv \(name) error: \(error)\n")
+    }
+}
+
+private func isPortListening(_ port: Int) -> Bool {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+    process.arguments = ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN"]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = Pipe()
+    do {
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard process.terminationStatus == 0 else { return false }
+        let output = String(data: data, encoding: .utf8) ?? ""
+        // lsof prints a header plus one or more rows when listeners exist.
+        return output.split(separator: "\n").count > 1
+    } catch {
+        return false
     }
 }

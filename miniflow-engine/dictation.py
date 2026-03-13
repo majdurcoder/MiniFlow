@@ -3,6 +3,8 @@ Dictation — keystroke injection into the focused app.
 Uses pyobjc Quartz CGEvent for key simulation (same API as the old Rust impl).
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import subprocess

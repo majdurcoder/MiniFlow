@@ -2,6 +2,8 @@
 Audio — receives raw audio chunks from Swift and streams to Smallest AI Waves for transcription.
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import json
