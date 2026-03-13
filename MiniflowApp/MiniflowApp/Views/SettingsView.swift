@@ -305,7 +305,7 @@ private struct GeneralTab: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Accessibility Permission")
                             .font(.system(size: 13))
-                        Text("Required for MiniFlow to type text into other apps.")
+                        Text("Required for MiniFlow to type text into other apps. After granting, you may need to restart MiniFlow.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

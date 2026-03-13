@@ -44,7 +44,7 @@ struct DictationWidget: View {
                 if let err = vm.errorMessage {
                     Text(err)
                         .font(.system(size: 11))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(err.contains("clipboard") ? .orange : .red)
                         .lineLimit(2)
                 }
             }

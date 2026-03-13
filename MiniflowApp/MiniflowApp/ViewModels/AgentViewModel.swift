@@ -14,11 +14,9 @@ final class AgentViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var needsAccessibility = false
 
-    // New: for main window UI
     @Published var history: [HistoryEntry] = []
     @Published var userName = ""
 
-    // Used by DictationPill to show last result
     @Published var lastResultAction: ActionResult?
 
     private let api = APIClient.shared
@@ -26,10 +24,9 @@ final class AgentViewModel: ObservableObject {
     private let audio = AudioCaptureService.shared
     private var cancellables = Set<AnyCancellable>()
     private var historyTimer: Timer?
+    private var accessibilityTimer: Timer?
     private var targetBundleID: String?
 
-    // Accumulate final transcript segments during a Fn-hold session.
-    // executeCommand is called ONCE with the full text when stopListening() fires.
     private var transcriptBuffer: [String] = []
 
     init() {
@@ -40,8 +37,8 @@ final class AgentViewModel: ObservableObject {
         }
 
         startHistoryPolling()
+        startAccessibilityPolling()
 
-        // Mirror agent-status events
         events.$agentStatus
             .receive(on: RunLoop.main)
             .sink { [weak self] status in
@@ -49,7 +46,6 @@ final class AgentViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Mirror transcription events — buffer finals, execute only when Fn released
         events.$transcription
             .compactMap { $0 }
             .receive(on: RunLoop.main)
@@ -57,17 +53,14 @@ final class AgentViewModel: ObservableObject {
                 guard let self else { return }
                 if event.isFinal && !event.transcript.isEmpty {
                     self.transcriptBuffer.append(event.transcript)
-                    // Show the accumulated transcript in the UI (joined)
                     self.transcript = self.transcriptBuffer.joined(separator: " ")
                 } else if !event.isFinal {
-                    // Show live interim text (won't be acted on)
                     let base = self.transcriptBuffer.joined(separator: " ")
                     self.transcript = base.isEmpty ? event.transcript : base + " " + event.transcript
                 }
             }
             .store(in: &cancellables)
 
-        // Append incoming action results
         events.$lastActionResult
             .compactMap { $0 }
             .receive(on: RunLoop.main)
@@ -81,6 +74,7 @@ final class AgentViewModel: ObservableObject {
 
     deinit {
         historyTimer?.invalidate()
+        accessibilityTimer?.invalidate()
     }
 
     // MARK: - History
@@ -189,12 +183,40 @@ final class AgentViewModel: ObservableObject {
     // MARK: - Accessibility
 
     func checkAccessibility() async {
-        needsAccessibility = !AXIsProcessTrusted()
+        let trusted = AXIsProcessTrusted()
+        axLog("checkAccessibility: trusted=\(trusted)")
+        needsAccessibility = !trusted
+        if !trusted {
+            let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(opts)
+        }
     }
 
     func openAccessibilitySettings() {
+        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(opts)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func startAccessibilityPolling() {
+        accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let trusted = AXIsProcessTrusted()
+                if self.needsAccessibility && trusted {
+                    axLog("Accessibility granted (detected by poll)")
+                    self.needsAccessibility = false
+                    if self.errorMessage?.contains("Accessibility") == true
+                        || self.errorMessage?.contains("clipboard") == true {
+                        self.errorMessage = nil
+                    }
+                } else if !self.needsAccessibility && !trusted {
+                    axLog("Accessibility revoked (detected by poll)")
+                    self.needsAccessibility = true
+                }
+            }
         }
     }
 
@@ -205,20 +227,33 @@ final class AgentViewModel: ObservableObject {
             return
         }
 
-        guard AXIsProcessTrusted() else {
-            needsAccessibility = true
-            errorMessage = "Accessibility permission required. Go to System Settings → Privacy → Accessibility and enable MiniFlow."
+        let text = dictation.message
+        guard !text.isEmpty else { return }
+
+        let trusted = AXIsProcessTrusted()
+        axLog("handleLocalDictation: trusted=\(trusted), text='\(String(text.prefix(60)))'")
+
+        if trusted {
+            needsAccessibility = false
+
+            if let bundleID = targetBundleID {
+                activateTargetApp(bundleID)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
+
+            typeTextLocally(text)
+            axLog("handleLocalDictation: typed via CGEvent")
             return
         }
 
-        needsAccessibility = false
+        // Accessibility not granted — copy text to clipboard as fallback
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        axLog("handleLocalDictation: no accessibility, copied to clipboard")
 
-        if let bundleID = targetBundleID {
-            activateTargetApp(bundleID)
-            try? await Task.sleep(nanoseconds: 300_000_000)
-        }
-
-        typeTextLocally(dictation.message)
+        needsAccessibility = true
+        errorMessage = "Text copied to clipboard (⌘V to paste). Enable Accessibility for auto-typing."
     }
 
     private func activateTargetApp(_ bundleID: String) {
@@ -228,18 +263,47 @@ final class AgentViewModel: ObservableObject {
 
     private func typeTextLocally(_ text: String) {
         guard !text.isEmpty else { return }
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+        guard let source = CGEventSource(stateID: .hidSystemState) else {
+            axLog("typeTextLocally: failed to create CGEventSource")
+            return
+        }
 
         let utf16 = Array(text.utf16)
-        if let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-           let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
-            utf16.withUnsafeBufferPointer { buf in
-                guard let base = buf.baseAddress else { return }
-                down.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: base)
-                up.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: base)
+        let maxChunk = 20
+        var offset = 0
+
+        while offset < utf16.count {
+            let end = min(offset + maxChunk, utf16.count)
+            let chunk = Array(utf16[offset..<end])
+
+            if let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+               let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
+                chunk.withUnsafeBufferPointer { buf in
+                    guard let base = buf.baseAddress else { return }
+                    down.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: base)
+                    up.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: base)
+                }
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
             }
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
+            offset = end
         }
+        axLog("typeTextLocally: injected \(utf16.count) UTF-16 units in \((utf16.count + maxChunk - 1) / maxChunk) chunks")
+    }
+}
+
+// MARK: - Diagnostics
+
+private func axLog(_ message: String) {
+    let ts = ISO8601DateFormatter.string(from: Date(), timeZone: .current,
+                                          formatOptions: [.withTime, .withColonSeparatorInTime])
+    let line = "[\(ts) Swift/AX] \(message)\n"
+    NSLog("MiniFlow AX: %@", message)
+    let logURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("miniflow/miniflow.log")
+    if let handle = try? FileHandle(forWritingTo: logURL) {
+        handle.seekToEndOfFile()
+        handle.write(Data(line.utf8))
+        handle.closeFile()
     }
 }
