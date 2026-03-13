@@ -25,21 +25,14 @@ async def _emit(event: str, payload):
 
 try:
     from Quartz import AXIsProcessTrusted as _AXIsProcessTrusted
-    from ApplicationServices import AXIsProcessTrustedWithOptions
-    _kAXTrustedCheckOptionPrompt = "AXTrustedCheckOptionPrompt"
     def AXIsProcessTrusted() -> bool:
         return _AXIsProcessTrusted()
 except Exception:
-    AXIsProcessTrustedWithOptions = None
     def AXIsProcessTrusted() -> bool:
         return False
 
 
 def check_accessibility() -> bool:
-    """Check (and prompt for) accessibility permission for this process."""
-    if AXIsProcessTrustedWithOptions is not None:
-        # Prompt=True opens System Settings to the right place if not trusted
-        return AXIsProcessTrustedWithOptions({_kAXTrustedCheckOptionPrompt: True})
     return AXIsProcessTrusted()
 
 
