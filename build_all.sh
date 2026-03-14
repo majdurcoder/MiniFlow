@@ -60,7 +60,6 @@ echo ""
 echo "━━━ Step 2/4: Building Swift app ($CONFIG) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 rm -rf "$APP_PATH"
-mkdir -p "$BUILD_DIR"
 
 xcodebuild \
   -project "$XCODE_PROJECT" \
