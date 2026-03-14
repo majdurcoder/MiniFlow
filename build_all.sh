@@ -58,9 +58,9 @@ fi
 
 echo ""
 echo "━━━ Step 2/4: Building Swift app ($CONFIG) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
 rm -rf "$APP_PATH"
 mkdir -p "$BUILD_DIR"
+xattr -w com.apple.xcode.CreatedByBuildSystem true "$BUILD_DIR" 2>/dev/null || true
 
 xcodebuild \
   -project "$XCODE_PROJECT" \
