@@ -169,20 +169,22 @@ async def websocket_endpoint(ws: WebSocket):
 
 # ── Invoke dispatcher ──
 
-async def _start_listening(b: dict):
+async def _transcribe_audio(b: dict):
     bundle_id = b.get("bundleID")
     if bundle_id:
         agent.set_target_app(bundle_id)
-    return await audio.start_listening(b.get("sampleRate", 16000))
+    audio_b64 = b.get("audio")
+    if not audio_b64:
+        return {"status": "error", "error": "Missing audio payload"}
+    language = b.get("language", "en")
+    return await audio.transcribe_audio(audio_b64, language)
 
 
 @app.post("/invoke/{command}")
 async def invoke(command: str, body: dict = {}):
     handlers = {
         # Audio
-        "start_listening":       lambda b: _start_listening(b),
-        "stop_listening":        lambda b: audio.stop_listening(),
-        "send_audio_chunk":      lambda b: audio.send_audio_chunk(b["chunk"]),
+        "transcribe_audio":      lambda b: _transcribe_audio(b),
         # Agent
         "execute_command":       lambda b: agent.execute_command(b["command"]),
         # Config
