@@ -46,6 +46,16 @@ struct DictationWidget: View {
                         .font(.system(size: 11))
                         .foregroundStyle(err.contains("clipboard") ? .orange : .red)
                         .lineLimit(2)
+
+                    if vm.needsAccessibility {
+                        Button("Enable Accessibility") {
+                            vm.openAccessibilitySettings()
+                        }
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.accentBrown)
+                        .buttonStyle(.plain)
+                        .underline()
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

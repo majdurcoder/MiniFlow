@@ -27,6 +27,8 @@
 	<string>MiniFlow uses your microphone to capture voice commands.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>MiniFlow uses Apple Events to activate apps when typing dictated text.</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>MiniFlow needs Accessibility access to type dictated text at your cursor in any app.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

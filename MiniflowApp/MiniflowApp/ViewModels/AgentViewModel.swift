@@ -218,24 +218,44 @@ final class AgentViewModel: ObservableObject {
         if trusted {
             needsAccessibility = false
 
-            if let bundleID = targetBundleID {
-                activateTargetApp(bundleID)
-                try? await Task.sleep(nanoseconds: 300_000_000)
+            // Determine which app to type into
+            let bundleID = targetBundleID ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            let ownBundleID = Bundle.main.bundleIdentifier
+
+            // Don't type into MiniFlow itself — fall back to clipboard
+            if bundleID == ownBundleID {
+                copyToClipboard(text)
+                axLog("handleLocalDictation: MiniFlow is frontmost, copied to clipboard")
+                errorMessage = "Text copied to clipboard (⌘V to paste) — switch to your app first."
+                return
             }
 
-            typeTextLocally(text)
+            if let bundleID {
+                activateTargetApp(bundleID)
+                // Wait for the app to come to front — poll until it's frontmost or timeout
+                for _ in 0..<20 {
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                    if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID { break }
+                }
+            }
+
+            await typeTextLocally(text)
             axLog("handleLocalDictation: typed via CGEvent")
             return
         }
 
         // Accessibility not granted — copy text to clipboard as fallback
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        copyToClipboard(text)
         axLog("handleLocalDictation: no accessibility, copied to clipboard")
 
         needsAccessibility = true
         errorMessage = "Text copied to clipboard (⌘V to paste). Enable Accessibility for auto-typing."
+    }
+
+    private func copyToClipboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     private func activateTargetApp(_ bundleID: String) {
@@ -243,7 +263,7 @@ final class AgentViewModel: ObservableObject {
         apps.first?.activate(options: [.activateIgnoringOtherApps])
     }
 
-    private func typeTextLocally(_ text: String) {
+    private func typeTextLocally(_ text: String) async {
         guard !text.isEmpty else { return }
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             axLog("typeTextLocally: failed to create CGEventSource")
@@ -251,8 +271,9 @@ final class AgentViewModel: ObservableObject {
         }
 
         let utf16 = Array(text.utf16)
-        let maxChunk = 20
+        let maxChunk = 10 // smaller chunks = fewer dropped chars
         var offset = 0
+        var chunkCount = 0
 
         while offset < utf16.count {
             let end = min(offset + maxChunk, utf16.count)
@@ -269,8 +290,11 @@ final class AgentViewModel: ObservableObject {
                 up.post(tap: .cghidEventTap)
             }
             offset = end
+            chunkCount += 1
+            // Small delay between chunks so apps don't drop characters
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
         }
-        axLog("typeTextLocally: injected \(utf16.count) UTF-16 units in \((utf16.count + maxChunk - 1) / maxChunk) chunks")
+        axLog("typeTextLocally: injected \(utf16.count) UTF-16 units in \(chunkCount) chunks")
     }
 }
 

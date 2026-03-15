@@ -29,6 +29,13 @@ struct HomeTab: View {
                 if !vm.history.isEmpty {
                     historySection
                 }
+
+                // Build watermark
+                Text("auto-type fix · Mar 14")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.black.opacity(0.25))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 4)
             }
             .padding(28)
         }
