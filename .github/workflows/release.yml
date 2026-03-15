@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - audioTransmission
   workflow_dispatch:
     inputs:
       version:
