@@ -74,7 +74,6 @@ manager = ConnectionManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("MiniFlow engine starting on http://localhost:8765")
-    audio.set_event_broadcaster(manager.broadcast)
     dictation.set_event_broadcaster(manager.broadcast)
     agent.set_event_broadcaster(manager.broadcast)
     yield
@@ -169,20 +168,21 @@ async def websocket_endpoint(ws: WebSocket):
 
 # ── Invoke dispatcher ──
 
-async def _start_listening(b: dict):
+async def _transcribe_audio(b: dict):
+    import base64
     bundle_id = b.get("bundleID")
     if bundle_id:
         agent.set_target_app(bundle_id)
-    return await audio.start_listening(b.get("sampleRate", 16000))
+    wav_bytes = base64.b64decode(b["audio"])
+    transcript = await audio.transcribe(wav_bytes)
+    return {"transcript": transcript}
 
 
 @app.post("/invoke/{command}")
 async def invoke(command: str, body: dict = {}):
     handlers = {
         # Audio
-        "start_listening":       lambda b: _start_listening(b),
-        "stop_listening":        lambda b: audio.stop_listening(),
-        "send_audio_chunk":      lambda b: audio.send_audio_chunk(b["chunk"]),
+        "transcribe_audio":      lambda b: _transcribe_audio(b),
         # Agent
         "execute_command":       lambda b: agent.execute_command(b["command"]),
         # Config

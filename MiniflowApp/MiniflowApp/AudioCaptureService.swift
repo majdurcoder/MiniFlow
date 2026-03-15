@@ -7,6 +7,7 @@ final class AudioCaptureService {
 
     private let engine = AVAudioEngine()
     private var isRunning = false
+    private var accumulatedPCM = Data()
 
     private init() {
         // When the user changes audio device (plug/unplug headphones, switch input),
@@ -40,6 +41,7 @@ final class AudioCaptureService {
 
     func startCapture() throws {
         guard !isRunning else { return }
+        accumulatedPCM = Data()
 
         let input = engine.inputNode
         let native = input.inputFormat(forBus: 0)
@@ -61,15 +63,50 @@ final class AudioCaptureService {
         isRunning = false
     }
 
+    /// Stop capture and return a WAV-encoded Data containing all recorded audio.
+    func stopCaptureAndGetWav() -> Data {
+        stopCapture()
+        return buildWav(from: accumulatedPCM)
+    }
+
     // MARK: - Buffer processing
 
     private func handle(buffer: AVAudioPCMBuffer, nativeFormat: AVAudioFormat) {
         guard let converted = convert(buffer, from: nativeFormat, to: format) else { return }
         guard let data = pcmData(from: converted) else { return }
-        let base64 = data.base64EncodedString()
-        Task { @MainActor in
-            try? await APIClient.shared.invokeVoid("send_audio_chunk", body: ["chunk": base64])
+        accumulatedPCM.append(data)
+    }
+
+    // MARK: - WAV encoding
+
+    private func buildWav(from pcm: Data) -> Data {
+        var wav = Data()
+        let pcmSize = UInt32(pcm.count)
+
+        func appendLE<T: FixedWidthInteger>(_ value: T) {
+            var v = value.littleEndian
+            withUnsafeBytes(of: &v) { wav.append(contentsOf: $0) }
         }
+
+        // RIFF chunk
+        wav.append(contentsOf: "RIFF".utf8)
+        appendLE(pcmSize + 36)          // file size minus 8-byte RIFF header
+        wav.append(contentsOf: "WAVE".utf8)
+        // fmt chunk
+        wav.append(contentsOf: "fmt ".utf8)
+        appendLE(UInt32(16))            // chunk size
+        appendLE(UInt16(1))             // PCM
+        appendLE(UInt16(1))             // mono
+        appendLE(UInt32(16_000))        // sample rate
+        appendLE(UInt32(32_000))        // byte rate (sampleRate * blockAlign)
+        appendLE(UInt16(2))             // block align
+        appendLE(UInt16(16))            // bits per sample
+        // data chunk
+        wav.append(contentsOf: "data".utf8)
+        appendLE(pcmSize)
+        wav.append(pcm)
+
+        return wav
     }
 
     // MARK: - Helpers

@@ -9,7 +9,6 @@ final class EventStream: ObservableObject {
 
     // MARK: - Published state
 
-    @Published var transcription: TranscriptionEvent?
     @Published var agentStatus: String = "idle"
     @Published var lastActionResult: ActionResultPayload?
     @Published var lastOAuthProvider: String?
@@ -75,14 +74,6 @@ final class EventStream: ObservableObject {
 
         DispatchQueue.main.async {
             switch event {
-            case "transcription":
-                guard let p = payload as? [String: Any] else { return }
-                self.transcription = TranscriptionEvent(
-                    transcript: p["transcript"] as? String ?? "",
-                    isFinal: p["is_final"] as? Bool ?? false,
-                    confidence: p["confidence"] as? Double ?? 0
-                )
-
             case "agent-status":
                 self.agentStatus = payload as? String ?? "idle"
 
@@ -106,12 +97,6 @@ final class EventStream: ObservableObject {
 }
 
 // MARK: - Event types
-
-struct TranscriptionEvent {
-    let transcript: String
-    let isFinal: Bool
-    let confidence: Double
-}
 
 struct ActionResultPayload {
     let action: String

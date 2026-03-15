@@ -27,8 +27,6 @@ final class AgentViewModel: ObservableObject {
     private var accessibilityTimer: Timer?
     private var targetBundleID: String?
 
-    private var transcriptBuffer: [String] = []
-
     init() {
         Task {
             await checkAccessibility()
@@ -43,21 +41,6 @@ final class AgentViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] status in
                 self?.isProcessing = (status == "processing")
-            }
-            .store(in: &cancellables)
-
-        events.$transcription
-            .compactMap { $0 }
-            .receive(on: RunLoop.main)
-            .sink { [weak self] event in
-                guard let self else { return }
-                if event.isFinal && !event.transcript.isEmpty {
-                    self.transcriptBuffer.append(event.transcript)
-                    self.transcript = self.transcriptBuffer.joined(separator: " ")
-                } else if !event.isFinal {
-                    let base = self.transcriptBuffer.joined(separator: " ")
-                    self.transcript = base.isEmpty ? event.transcript : base + " " + event.transcript
-                }
             }
             .store(in: &cancellables)
 
@@ -104,7 +87,6 @@ final class AgentViewModel: ObservableObject {
         isListening = true
         targetBundleID = targetApp
         transcript = ""
-        transcriptBuffer = []
         errorMessage = nil
         lastResultAction = nil
 
@@ -130,13 +112,9 @@ final class AgentViewModel: ObservableObject {
         }
 
         do {
-            var body: [String: Any] = ["sampleRate": 16000]
-            if let bundleID = targetApp { body["bundleID"] = bundleID }
-            try await api.invokeVoid("start_listening", body: body)
             try audio.startCapture()
         } catch {
             isListening = false
-            audio.stopCapture()
             errorMessage = error.localizedDescription
         }
     }
@@ -144,18 +122,21 @@ final class AgentViewModel: ObservableObject {
     func stopListening() async {
         guard isListening else { return }
         isListening = false
-        audio.stopCapture()
-        do { try await api.invokeVoid("stop_listening") } catch {}
 
-        // The stop_listening HTTP call above already waits for Waves to flush (finalize + 2s timeout).
-        // Give WebSocket events a moment to land before we collect the buffer.
-        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
+        let wavData = audio.stopCaptureAndGetWav()
+        guard !wavData.isEmpty else { return }
 
-        // Execute with the full accumulated text from this session
-        let fullText = transcriptBuffer.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        transcriptBuffer = []
-        if !fullText.isEmpty {
-            await executeCommand(fullText)
+        do {
+            var body: [String: Any] = ["audio": wavData.base64EncodedString()]
+            if let bundleID = targetBundleID { body["bundleID"] = bundleID }
+            let result: [String: String] = try await api.invoke("transcribe_audio", body: body)
+            let fullText = (result["transcript"] ?? "").trimmingCharacters(in: .whitespaces)
+            transcript = fullText
+            if !fullText.isEmpty {
+                await executeCommand(fullText)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
