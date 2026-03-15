@@ -9,12 +9,17 @@ struct HomeTab: View {
             VStack(alignment: .leading, spacing: 20) {
 
                 // Welcome header
-                Text(vm.userName.isEmpty
-                     ? "Welcome back"
-                     : "Welcome back, \(vm.userName)")
-                    .font(.custom("Georgia-Bold", size: 26))
-                    .foregroundStyle(Color.black)
-                    .padding(.bottom, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(vm.userName.isEmpty
+                         ? "Welcome back"
+                         : "Welcome back, \(vm.userName)")
+                        .font(.custom("Georgia-Bold", size: 26))
+                        .foregroundStyle(Color.black)
+                    Text("auto-type fix · Mar 14")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.black.opacity(0.3))
+                }
+                .padding(.bottom, 2)
 
                 // Stats row
                 statsRow
@@ -30,12 +35,6 @@ struct HomeTab: View {
                     historySection
                 }
 
-                // Build watermark
-                Text("auto-type fix · Mar 14")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color.black.opacity(0.25))
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 4)
             }
             .padding(28)
         }
