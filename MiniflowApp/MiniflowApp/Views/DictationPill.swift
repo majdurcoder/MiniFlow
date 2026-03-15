@@ -15,6 +15,15 @@ struct DictationPill: View {
         .padding(.horizontal, 16)
         .frame(width: 280, height: 56)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(alignment: .topTrailing) {
+            if !vm.isListening && !vm.isProcessing {
+                Text("auto-type fix · Mar 14")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary.opacity(0.6))
+                    .padding(.trailing, 10)
+                    .padding(.top, 5)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(.white.opacity(0.18), lineWidth: 1)
