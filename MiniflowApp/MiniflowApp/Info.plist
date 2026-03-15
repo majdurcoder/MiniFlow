@@ -25,6 +25,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>MiniFlow uses your microphone to capture voice commands.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MiniFlow uses Apple Events to activate apps when typing dictated text.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
