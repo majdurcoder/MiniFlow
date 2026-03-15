@@ -1,4 +1,4 @@
-name: Build & Release
+name: Build DMG
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
         default: ''
 
 jobs:
-  build-and-release:
+  build:
     runs-on: macos-latest
 
     steps:
@@ -44,9 +44,9 @@ jobs:
       - name: Build (backend + Swift app + DMG)
         run: VERSION=${{ steps.version.outputs.version }} bash build_all.sh
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: MiniFlow v${{ steps.version.outputs.version }}
-          files: build/MiniFlow-${{ steps.version.outputs.version }}.dmg
+          name: MiniFlow-${{ steps.version.outputs.version }}
+          path: build/MiniFlow-${{ steps.version.outputs.version }}.dmg
+          retention-days: 14
