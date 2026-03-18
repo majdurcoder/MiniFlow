@@ -41,7 +41,7 @@ async def start_listening(sample_rate: int = 16000):
 
     url = (
         f"wss://api.smallest.ai/waves/v1/pulse/get_text"
-        f"?encoding=linear16&sample_rate={sample_rate}&language=en&word_timestamps=false"
+        f"?encoding=linear16&sample_rate={sample_rate}&language=en&word_timestamps=false&numerals=true"
     )
     _waves_ws = await websockets.connect(url, extra_headers={"Authorization": f"Bearer {key}"})
     asyncio.create_task(_receive_transcripts())
